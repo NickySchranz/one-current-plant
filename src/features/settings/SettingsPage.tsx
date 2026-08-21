@@ -1,0 +1,483 @@
+import { useEffect, useState } from "react";
+import { Alert, Platform, Pressable, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { selectEffectivePro, useAppStore } from "@/stores/app-store";
+import { api, ApiHttpError, ApiOfflineError, getApiUrl, hasTokens, setApiUrl } from "@/api/client";
+import { useT } from "@/i18n/i18n";
+import {
+  AppTextInput,
+  Button,
+  Card,
+  H2,
+  Hint,
+  P,
+  T,
+  rowStyles,
+} from "@/ui/primitives";
+import { useTheme } from "@/ui/theme";
+import { ShareWithPsychologist } from "./ShareWithPsychologist";
+
+/** A plain checkbox row (the reduce-motion toggle). */
+function CheckboxRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      onPress={() => onChange(!checked)}
+      style={{ flexDirection: "row", gap: 9.6, alignItems: "center" }}
+    >
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 4,
+          borderWidth: 1,
+          borderColor: checked ? t.accent : t.lineAxis,
+          backgroundColor: checked ? t.accent : t.bgRaised,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {checked && <T style={{ color: t.accentInk, fontSize: 13, lineHeight: 16 }}>✓</T>}
+      </View>
+      <T style={{ flexShrink: 1 }}>{label}</T>
+    </Pressable>
+  );
+}
+
+/** Appearance, language, comfort, and privacy sections, rendered inside More. */
+export function SettingsSections() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const setLanguage = useAppStore((s) => s.setLanguage);
+  const reducedMotion = useAppStore((s) => s.reducedMotion);
+  const setReducedMotion = useAppStore((s) => s.setReducedMotion);
+  const mascotType = useAppStore((s) => s.mascotType);
+  const setMascotType = useAppStore((s) => s.setMascotType);
+  const exportData = useAppStore((s) => s.exportData);
+  const importData = useAppStore((s) => s.importData);
+  const deleteEverything = useAppStore((s) => s.deleteEverything);
+  const loadExampleData = useAppStore((s) => s.loadExampleData);
+  const timeSkewMs = useAppStore((s) => s.timeSkewMs);
+  const timeRate = useAppStore((s) => s.timeRate);
+  const setTimeRate = useAppStore((s) => s.setTimeRate);
+  const resetTimeSkew = useAppStore((s) => s.resetTimeSkew);
+  const isPro = useAppStore((s) => s.isPro);
+  const setPro = useAppStore((s) => s.setPro);
+  const effectivePro = useAppStore(selectEffectivePro);
+  const apiOnline = useAppStore((s) => s.apiOnline);
+  const syncMe = useAppStore((s) => s.syncMe);
+  const authUser = useAppStore((s) => s.authUser);
+  const signOut = useAppStore((s) => s.signOut);
+
+  const [message, setMessage] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Native fallbacks for the file-based export/import that the web build uses.
+  const [exportJson, setExportJson] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  // Account & sync
+  const signedIn = hasTokens();
+  const [urlDraft, setUrlDraft] = useState("");
+  const [syncMsg, setSyncMsg] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [confirmingRestore, setConfirmingRestore] = useState(false);
+
+  useEffect(() => {
+    void getApiUrl().then(setUrlDraft);
+  }, []);
+
+  function syncError(e: unknown): string {
+    if (e instanceof ApiOfflineError) return t("The server could not be reached.");
+    if (e instanceof ApiHttpError && e.code === "pro_required")
+      return t("Cloud backup is part of Pro.");
+    if (e instanceof ApiHttpError && e.code === "no_backup")
+      return t("There is no backup on the server yet.");
+    return t("That did not work. Try again in a moment.");
+  }
+
+  async function uploadBackup() {
+    setSyncBusy(true);
+    setSyncMsg("");
+    try {
+      const json = await exportData();
+      await api.uploadBackup(json);
+      setSyncMsg(t("Backup uploaded."));
+    } catch (e) {
+      setSyncMsg(syncError(e));
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function restoreBackup() {
+    setSyncBusy(true);
+    setSyncMsg("");
+    try {
+      const doc = await api.downloadBackup();
+      await importData(JSON.stringify(doc));
+      setSyncMsg(t("Backup restored."));
+    } catch (e) {
+      setSyncMsg(syncError(e));
+    } finally {
+      setSyncBusy(false);
+      setConfirmingRestore(false);
+    }
+  }
+
+  async function doExport() {
+    const json = await exportData();
+    if (Platform.OS === "web") {
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `one-current-plant-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    // No downloads on native: show the JSON so it can be copied out.
+    setExportJson(json);
+  }
+
+  async function doImport(text: string) {
+    try {
+      await importData(text);
+      setMessage(t("Import complete."));
+      setImportOpen(false);
+      setImportText("");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : t("Import failed."));
+    }
+  }
+
+  function pickImport() {
+    if (Platform.OS === "web") {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "application/json";
+      input.onchange = () => {
+        const f = input.files?.[0];
+        if (f) void f.text().then((text) => doImport(text));
+      };
+      input.click();
+      return;
+    }
+    setImportOpen((v) => !v);
+  }
+
+  return (
+    <>
+      <H2>{t("Account")}</H2>
+      <Card>
+        <View style={rowStyles.filterRow}>
+          <T style={{ flexShrink: 1 }}>
+            {authUser?.name
+              ? t("Signed in as {name} ({email})", {
+                  name: authUser.name,
+                  email: authUser.email,
+                })
+              : t("Signed in as {email}", { email: authUser?.email ?? "" })}
+          </T>
+          <Button onPress={signOut} label={t("Sign out")} />
+        </View>
+        {!signedIn && (
+          <Hint style={{ marginTop: 8, marginBottom: 0 }}>
+            {t("Offline — signed in on this device only.")}
+          </Hint>
+        )}
+        <Hint style={{ marginTop: 8, marginBottom: 0 }}>
+          {t("Signing out only closes the door — every leaf stays on this device.")}
+        </Hint>
+      </Card>
+
+      <H2>{t("Account & sync")}</H2>
+      <Card>
+        <Hint>
+          {t(
+            "Cloud backup keeps a copy of everything on your account so a new device can pick it up. Part of Pro.",
+          )}
+        </Hint>
+        {!signedIn ? (
+          <Hint style={{ marginBottom: 0 }}>
+            {t("Sign in while the server is reachable to use cloud backup.")}
+          </Hint>
+        ) : (
+          <>
+            <View style={rowStyles.filterRow}>
+              <Button
+                onPress={() => void uploadBackup()}
+                disabled={syncBusy || !effectivePro || apiOnline === false}
+                label={t("Upload backup")}
+              />
+              {!confirmingRestore ? (
+                <Button
+                  onPress={() => setConfirmingRestore(true)}
+                  disabled={syncBusy || !effectivePro || apiOnline === false}
+                  label={t("Restore backup")}
+                />
+              ) : (
+                <>
+                  <T style={{ flexShrink: 1 }}>
+                    {t("Bring the server copy onto this device? Matching leaves are overwritten.")}
+                  </T>
+                  <Button
+                    variant="danger"
+                    onPress={() => void restoreBackup()}
+                    disabled={syncBusy}
+                    label={t("Yes, restore")}
+                  />
+                  <Button onPress={() => setConfirmingRestore(false)} label={t("Keep it")} />
+                </>
+              )}
+            </View>
+            {!effectivePro && (
+              <Hint style={{ marginTop: 8, marginBottom: 0 }}>
+                {t("Cloud backup is part of Pro.")}
+              </Hint>
+            )}
+            {apiOnline === false && (
+              <Hint style={{ marginTop: 8, marginBottom: 0 }}>
+                {t("The server could not be reached.")}
+              </Hint>
+            )}
+            {syncMsg !== "" && <P style={{ marginTop: 8, marginBottom: 0 }}>{syncMsg}</P>}
+          </>
+        )}
+        <View style={{ marginTop: 12, gap: 8 }}>
+          <Hint style={{ marginBottom: 0 }}>{t("Server address")}</Hint>
+          <View style={rowStyles.filterRow}>
+            <AppTextInput
+              value={urlDraft}
+              onChangeText={setUrlDraft}
+              placeholder="https://…"
+              accessibilityLabel={t("Server address")}
+              autoCapitalize="none"
+              style={{ flexGrow: 1, minWidth: 200 }}
+            />
+            <Button
+              onPress={() => {
+                void setApiUrl(urlDraft).then(() => {
+                  void syncMe();
+                  setSyncMsg(t("Server address saved."));
+                });
+              }}
+              label={t("Save")}
+            />
+          </View>
+        </View>
+      </Card>
+
+      <H2>{t("Companion")}</H2>
+      <Card>
+        <View accessibilityLabel={t("Companion character")} style={rowStyles.filterRow}>
+          {(["chronicler", "wisp", "wanderer"] as const).map((type) => (
+            <Button
+              key={type}
+              selected={mascotType === type}
+              onPress={() => setMascotType(type)}
+              label={type === "chronicler" ? "Scarlet ladybug" : type === "wisp" ? "Amber ladybug" : "Dusk ladybug"}
+            />
+          ))}
+        </View>
+        <Hint style={{ marginTop: 8, marginBottom: 0 }}>
+          {mascotType === "chronicler"
+            ? t("A bright scarlet ladybug who keeps quiet notes on every leaf.")
+            : mascotType === "wisp"
+              ? t("A warm amber ladybug that drifts from leaf to leaf, light as pollen.")
+              : t("A dusk-dark ladybug, calm and unhurried, at home on the stem.")}
+        </Hint>
+        <View style={{ marginTop: 12 }}>
+          <Button
+            style={{ alignSelf: "flex-start" }}
+            onPress={() => {
+              void AsyncStorage.removeItem("one-current-plant-tutorial-v1").then(() => {
+                if (Platform.OS === "web") {
+                  window.location.reload();
+                } else {
+                  Alert.alert(
+                    t("Tour restarted"),
+                    t("Navigate to Plant to see the tour again."),
+                  );
+                }
+              });
+            }}
+            label={t("Restart tour")}
+          />
+        </View>
+      </Card>
+
+      <H2>{t("Language")}</H2>
+      <Card>
+        <View accessibilityLabel={t("Language")} style={rowStyles.filterRow}>
+          <Button
+            selected={language === "en"}
+            onPress={() => setLanguage("en")}
+            label="English"
+          />
+          <Button
+            selected={language === "es"}
+            onPress={() => setLanguage("es")}
+            label="Español (España)"
+          />
+          <Button
+            selected={language === "es-CO"}
+            onPress={() => setLanguage("es-CO")}
+            label="Español (Colombia)"
+          />
+        </View>
+        <Hint style={{ marginTop: 8, marginBottom: 0 }}>
+          {t("Changes every word the app says. Your own words stay as you wrote them.")}
+        </Hint>
+      </Card>
+
+      <H2>{t("Comfort")}</H2>
+      <Card>
+        <CheckboxRow
+          label={t("Reduce motion (no leaf sway or pulsing)")}
+          checked={reducedMotion}
+          onChange={setReducedMotion}
+        />
+      </Card>
+
+      <H2>{t("Explore")}</H2>
+      <Card>
+        <Hint>
+          {t(
+            "See what a lived-in plant looks like: ten example leaves — wilting, folded, settled — plus today's actions. You can delete them any time.",
+          )}
+        </Hint>
+        <Button
+          style={{ alignSelf: "flex-start" }}
+          onPress={() => void loadExampleData()}
+          label={t("Load example leaves")}
+        />
+      </Card>
+
+      <H2>{t("Testing")}</H2>
+      <Card>
+        <Hint>
+          {t(
+            "Let the app's clock run faster than real time and watch how leaves wilt a little more when days pass without decisions. This only affects this session — reloading returns to real time.",
+          )}
+        </Hint>
+        <View accessibilityLabel={t("How fast time passes")} style={rowStyles.filterRow}>
+          <Button selected={timeRate === 1} onPress={() => setTimeRate(1)} label={t("Real time")} />
+          <Button
+            selected={timeRate === 3600}
+            onPress={() => setTimeRate(3600)}
+            label={t("An hour per second")}
+          />
+          <Button
+            selected={timeRate === 86400}
+            onPress={() => setTimeRate(86400)}
+            label={t("A day per second")}
+          />
+        </View>
+        {timeSkewMs > 60_000 && (
+          <View style={[rowStyles.filterRow, { marginTop: 8 }]}>
+            <T>
+              {t("The app is living {days} day(s) ahead.", {
+                days: (timeSkewMs / (24 * 60 * 60 * 1000)).toFixed(1),
+              })}
+            </T>
+            <Button onPress={resetTimeSkew} label={t("Back to real time")} />
+          </View>
+        )}
+        {/* Payments are not wired yet: this stands in for a real purchase. */}
+        <View style={{ marginTop: 12 }}>
+          <CheckboxRow
+            label={t("Pro unlocked (testing)")}
+            checked={isPro}
+            onChange={setPro}
+          />
+        </View>
+      </Card>
+
+      <H2>{t("Privacy")}</H2>
+      <Card>
+        <Hint>
+          {t(
+            "Everything you write stays in this browser, stored locally on your device. Nothing is sent anywhere. Export a copy before switching devices.",
+          )}
+        </Hint>
+        <View style={rowStyles.filterRow}>
+          <Button onPress={() => void doExport()} label={t("Export everything")} />
+          <Button
+            onPress={pickImport}
+            accessibilityLabel={t("Import a One Current Plant export file")}
+            label={t("Import")}
+          />
+          {!confirmingDelete ? (
+            <Button
+              variant="danger"
+              onPress={() => setConfirmingDelete(true)}
+              label={t("Delete everything")}
+            />
+          ) : (
+            <>
+              <T style={{ flexShrink: 1 }}>
+                {t(
+                  "Delete all leaves, everything settled, and your whole history? This cannot be undone.",
+                )}
+              </T>
+              <Button
+                variant="danger"
+                onPress={() => {
+                  void (async () => {
+                    await deleteEverything();
+                    setConfirmingDelete(false);
+                    setMessage(t("All data deleted."));
+                  })();
+                }}
+                label={t("Yes, delete")}
+              />
+              <Button onPress={() => setConfirmingDelete(false)} label={t("Keep it")} />
+            </>
+          )}
+        </View>
+        {exportJson !== "" && Platform.OS !== "web" && (
+          <AppTextInput
+            multiline
+            value={exportJson}
+            editable={false}
+            selectTextOnFocus
+            style={{ marginTop: 8, maxHeight: 180 }}
+            accessibilityLabel={t("Export everything")}
+          />
+        )}
+        {importOpen && Platform.OS !== "web" && (
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <AppTextInput
+              multiline
+              value={importText}
+              onChangeText={setImportText}
+              accessibilityLabel={t("Import a One Current Plant export file")}
+            />
+            <Button
+              style={{ alignSelf: "flex-start" }}
+              onPress={() => void doImport(importText)}
+              disabled={importText.trim() === ""}
+              label={t("Import")}
+            />
+          </View>
+        )}
+        {message !== "" && (
+          <P style={{ marginTop: 8, marginBottom: 0 }}>{message}</P>
+        )}
+      </Card>
+
+      <ShareWithPsychologist />
+    </>
+  );
+}

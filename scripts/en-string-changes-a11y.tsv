@@ -1,0 +1,24 @@
+Main life timeline from {month} to the present.	A potted plant by a window.
+No active threads reach today.	No leaves are open.
+One active thread reaches today.	One leaf is open.
+{n} active threads reach today.	{n} leaves are open.
+{title} began {when} and has loudness level {loudness}.	{title} sprouted {when} and wilts at level {loudness}.
+{title} is currently the most activated thread.	{title} is currently the most wilted leaf.
+One thread has been integrated and remains part of your history.	One leaf has healed and settled.
+{n} threads have been integrated and remain part of your history.	{n} leaves have healed and settled.
+Began {when}.	Sprouted {when}.
+Loudness level {loudness}.	Wilts at level {loudness}.
+Active thread reaching today	Open leaf
+Currently activated thread	Open leaf
+Explored thread, still active	Open leaf
+Ready to integrate into Now	Ready to settle
+In tension with another thread	Open leaf
+Handed off to real work	Healed and settled
+Partly integrated	Open leaf
+Integrated into your life	Healed and settled
+Archived	Let fall
+NEW	The sky outside is {word}.
+NEW	sunlit
+NEW	lightly clouded
+NEW	overcast
+NEW	soft rain
