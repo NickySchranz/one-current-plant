@@ -70,7 +70,7 @@ function Sun({ cx, cy, dimmed, reducedMotion }: {
     halo.value = 0.1;
     halo.value = withRepeat(
       withSequence(
-        withTiming(0.18, { duration: 2600, easing: easeInOut }),
+        withTiming(0.24, { duration: 2600, easing: easeInOut }),
         withTiming(0.1, { duration: 2600, easing: easeInOut }),
       ),
       -1,
@@ -224,9 +224,12 @@ export function WindowScene({ width, height, sillY, mainShare, hour, reducedMoti
       </Defs>
 
       <G clipPath="url(#window-sky)">
-        {/* sunlit: the sun alone in a clear sky */}
+        {/* sunlit: the sun in a clear sky, one far-off cloud keeping it company
+            so even the best day drifts gently */}
         <FadeLayer active={weather === "sunlit" && !tint.night} reducedMotion={reducedMotion}>
           <Sun cx={sunX} cy={sunY} dimmed={false} reducedMotion={reducedMotion} />
+          <Cloud cx={skyX + skyW * 0.22} cy={skyY + 40} scale={0.6} tint="#ffffff"
+            drift={10} periodMs={26000} reducedMotion={reducedMotion} />
         </FadeLayer>
 
         {/* lightly clouded: two soft clouds, the sun behind them */}

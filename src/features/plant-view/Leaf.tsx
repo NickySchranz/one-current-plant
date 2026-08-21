@@ -17,6 +17,7 @@ import { bladeClosedPath, bladePath, midribPath, petiolePath } from "@/visualiza
 import { leafSpots } from "@/visualization/plant/spots";
 import { PLANT_PALETTE } from "@/visualization/plant/palette";
 import { branchColor, restingToday } from "@/visualization/branch-lines/style";
+import { mix } from "@/ui/color";
 import type { ThemeId } from "@/visualization/theme";
 import { pathLength } from "@/visualization/path-sample";
 import { decidedToday } from "@/domain/feelings/logic";
@@ -92,7 +93,6 @@ export const Leaf = memo(function Leaf({
   const swaying =
     g.inWindow &&
     !reducedMotion &&
-    loudness > 1 &&
     isOpen(branch) &&
     !resting &&
     !acted &&
@@ -202,6 +202,13 @@ export const Leaf = memo(function Leaf({
   if (!g.inWindow) return null;
 
   const color = branchColor(branch, theme, emphasized ? "raised" : g.style.saturation);
+  // Health made visible: a tended leaf is fresh green; wilt dries the blade
+  // toward straw, and every decision that eases the wilt greens it back.
+  const dryness = g.settled || g.bud ? 0 : ((loudness - 1) / 4) * 45;
+  const bladeFill = alpha(mix(color, PLANT_PALETTE.dryLeaf, dryness), 0.55);
+  // A settled leaf has bloomed: a small flower where the blade used to be.
+  const petalR = g.bladeLength * 0.5;
+  const flowerCx = PETIOLE_LEN + petalR * 0.9;
   const label = branch.title.length > 18 ? branch.title.slice(0, 17) + "…" : branch.title;
   const labelText =
     label +
@@ -270,15 +277,35 @@ export const Leaf = memo(function Leaf({
 
         {/* blade, midrib, spots and dew unfurl (and fold) together */}
         <AnimatedG animatedProps={bladeGroupProps} pointerEvents="none">
-          <Path
-            d={blade}
-            fill={alpha(color, 0.55)}
-            stroke={color}
-            strokeWidth={focused || highlighted ? 1.9 : 1.4}
-            strokeLinejoin="round"
-            opacity={g.style.opacity}
-          />
-          {!g.bud && (
+          {g.settled ? (
+            /* healed and settled: the worry has bloomed */
+            <G opacity={g.style.opacity}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Ellipse
+                  key={i}
+                  transform={`rotate(${i * 72 + 18} ${flowerCx} 0)`}
+                  cx={flowerCx + petalR * 0.62}
+                  cy={0}
+                  rx={petalR * 0.62}
+                  ry={petalR * 0.38}
+                  fill={mix(PLANT_PALETTE.petal, color, 22)}
+                  stroke={PLANT_PALETTE.petalDeep}
+                  strokeWidth={0.8}
+                />
+              ))}
+              <Circle cx={flowerCx} cy={0} r={petalR * 0.34} fill={PLANT_PALETTE.flowerHeart} />
+            </G>
+          ) : (
+            <Path
+              d={blade}
+              fill={bladeFill}
+              stroke={color}
+              strokeWidth={focused || highlighted ? 1.9 : 1.4}
+              strokeLinejoin="round"
+              opacity={g.style.opacity}
+            />
+          )}
+          {!g.bud && !g.settled && (
             <Path
               d={midribPath(g.bladeLength)}
               stroke={color}

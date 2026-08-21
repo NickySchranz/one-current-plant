@@ -24,4 +24,10 @@ export const PLANT_PALETTE = {
   spot: "#6b4a2f",
   gold: "#d9a14e",
   dew: "#eaf4f8",
+  /** A heavy wilt dries the green toward this. */
+  dryLeaf: "#b3a05e",
+  /** Flowers — settled leaves bloom, and the crown flower opens with you. */
+  petal: "#e9b8c4",
+  petalDeep: "#d391a3",
+  flowerHeart: "#e7c26a",
 } as const;

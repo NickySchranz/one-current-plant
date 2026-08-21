@@ -78,6 +78,13 @@ export type PlantLayout = {
 export type PlantMetrics = {
   width: number;
   /**
+   * The stage height. The scene always fills it — the pot stands at the
+   * bottom, the window reaches the top. Leaves tighten their spacing to stay
+   * in view; only when even the tightest spacing cannot hold them all does
+   * the canvas grow beyond this and scroll.
+   */
+  minHeight?: number;
+  /**
    * Leaves that must keep their node no matter what their fork date says —
    * lines created this session (the optimistic draft, then the committed
    * thread). Appended, in creation order, to the topmost nodes so the draft
@@ -96,6 +103,8 @@ const BOTTOM_PAD = 24;
 const BASE_OFFSET = 46;
 const STEM_SWAY = 14;
 const SWAY_PERIOD_NODES = 5;
+/** Nodes never sit closer than this — beyond it the canvas grows and scrolls. */
+const MIN_NODE_GAP = 34;
 
 function sizes(width: number) {
   const compact = width < 640;
@@ -117,7 +126,8 @@ export function buildPlantLayout(
   metrics: PlantMetrics,
   now: Date = new Date(),
 ): PlantLayout {
-  const { nodeGap, bladeLength, bladeWidth } = sizes(metrics.width);
+  const { nodeGap: baseGap, bladeLength: baseBladeLength, bladeWidth: baseBladeWidth } =
+    sizes(metrics.width);
   const pinnedSet = new Set(metrics.pinnedIds);
   const pinned = (metrics.pinnedIds ?? [])
     .map((id) => branches.find((b) => b.id === id))
@@ -141,7 +151,22 @@ export function buildPlantLayout(
   const ordered = [...settled, ...open, ...pinned];
   const nodeCount = ordered.length;
 
-  const height = TOP_PAD + nodeCount * nodeGap + BASE_OFFSET + POT_H + BOTTOM_PAD;
+  // The scene fills the stage. Leaves close ranks before the canvas grows:
+  // the gap shrinks toward MIN_NODE_GAP as the stem fills, and only a plant
+  // taller than the stage even at the tightest spacing scrolls.
+  const fixed = TOP_PAD + BASE_OFFSET + POT_H + BOTTOM_PAD;
+  const height = Math.max(
+    metrics.minHeight ?? fixed + nodeCount * baseGap,
+    fixed + nodeCount * MIN_NODE_GAP,
+  );
+  const nodeGap =
+    nodeCount > 0
+      ? Math.max(MIN_NODE_GAP, Math.min(baseGap, (height - fixed) / nodeCount))
+      : baseGap;
+  // Tight spacing shrinks the leaves with it, so blades never crowd.
+  const crowd = Math.max(0.72, Math.min(1, nodeGap / baseGap));
+  const bladeLength = baseBladeLength * crowd;
+  const bladeWidth = baseBladeWidth * crowd;
   const potX = metrics.width / 2;
   const potY = height - BOTTOM_PAD - POT_H;
   const sillY = height - BOTTOM_PAD;

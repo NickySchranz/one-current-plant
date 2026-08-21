@@ -10,9 +10,10 @@ import {
 
 // Wilt made visible in movement: a loud leaf trembles gently around its stem
 // node while both ends stay anchored. The rhythm is slow on purpose — even a
-// level-5 leaf sways rather than shakes. A quiet leaf (1) hangs still.
-const A_DEG = [0, 0, 0.8, 1.4, 2.2, 3.0]; // degrees, half-arc of the sway
-const FREQ_HZ = [0, 0, 0.1, 0.16, 0.24, 0.34]; // sway cycles per second
+// level-5 leaf sways rather than shakes. A quiet leaf (1) barely breathes in
+// the room's still air, but it is never frozen — the plant is alive.
+const A_DEG = [0, 0.55, 0.9, 1.4, 2.2, 3.0]; // degrees, half-arc of the sway
+const FREQ_HZ = [0, 0.07, 0.1, 0.16, 0.24, 0.34]; // sway cycles per second
 
 /** Linear blend between neighbouring table entries for fractional levels. */
 function lerpTable(table: number[], level: number): number {

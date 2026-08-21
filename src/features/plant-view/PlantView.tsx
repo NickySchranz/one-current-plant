@@ -32,6 +32,7 @@ import { PaywallPrompt, useThreadGate } from "@/features/paywall/PaywallPrompt";
 import { TimelineHelp } from "@/features/timeline-help/TimelineHelp";
 import { SkyPanel } from "./SkyPanel";
 import { WindowScene } from "./WindowScene";
+import { CrownBloom } from "./CrownBloom";
 import { branchColor } from "@/visualization/branch-lines/style";
 import { useT } from "@/i18n/i18n";
 import { useTheme } from "@/ui/theme";
@@ -232,13 +233,16 @@ export function PlantView() {
         visible,
         {
           width: size.width,
+          // The scene always fills the stage — pot at the bottom, window to
+          // the top. Leaves tighten ranks before the canvas ever scrolls.
+          minHeight: size.height,
           // Leaves created this session keep their node — through "since
           // when?" changes and past the save, while the quick menu is open.
           pinnedIds: pinnedBranchIds,
         },
         now,
       ),
-    [visible, size.width, now, pinnedBranchIds],
+    [visible, size.width, size.height, now, pinnedBranchIds],
   );
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -659,6 +663,14 @@ export function PlantView() {
                 strokeLinecap="round"
                 strokeDasharray={tk.mainFlowDash}
                 opacity={0.35}
+              />
+
+              {/* the crown flower: opens as decisions clear the sky */}
+              <CrownBloom
+                x={layout.crownX}
+                y={layout.crownY}
+                mainShare={mainShare}
+                reducedMotion={reducedMotion}
               />
 
               {/* every decision gathers on the sill — a calm record of the
